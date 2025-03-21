@@ -13,11 +13,15 @@ interface StoreState {
   setTransactions: (transactions: Transaction[]) => void;
   setEmployees: (employees: Employee[]) => void;
   setCurrentUser: (employee: Employee | null) => void;
+  fetchProducts: () => Promise<void>;
+  addProduct: (product: Omit<Product, 'id'>) => Promise<void>;
+  updateProduct: (id: string, product: Partial<Product>) => Promise<void>;
+  deleteProduct: (id: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
-export const useStore = create<StoreState>((set) => ({
+export const useStore = create<StoreState>((set, get) => ({
   products: [],
   suppliers: [],
   transactions: [],
@@ -28,6 +32,70 @@ export const useStore = create<StoreState>((set) => ({
   setTransactions: (transactions) => set({ transactions }),
   setEmployees: (employees) => set({ employees }),
   setCurrentUser: (currentUser) => set({ currentUser }),
+  
+  fetchProducts: async () => {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*');
+    
+    if (error) {
+      console.error('Error fetching products:', error);
+      return;
+    }
+    
+    set({ products: data || [] });
+  },
+  
+  addProduct: async (product) => {
+    const { data, error } = await supabase
+      .from('products')
+      .insert([product])
+      .select();
+    
+    if (error) {
+      console.error('Error adding product:', error);
+      throw error;
+    }
+    
+    if (data) {
+      set({ products: [...get().products, data[0]] });
+    }
+  },
+  
+  updateProduct: async (id, product) => {
+    const { error } = await supabase
+      .from('products')
+      .update(product)
+      .eq('id', id);
+    
+    if (error) {
+      console.error('Error updating product:', error);
+      throw error;
+    }
+    
+    set({
+      products: get().products.map((p) => 
+        p.id === id ? { ...p, ...product } : p
+      )
+    });
+  },
+  
+  deleteProduct: async (id) => {
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', id);
+    
+    if (error) {
+      console.error('Error deleting product:', error);
+      throw error;
+    }
+    
+    set({
+      products: get().products.filter((p) => p.id !== id)
+    });
+  },
+  
   signIn: async (email: string, password: string) => {
     const { data: { user }, error } = await supabase.auth.signInWithPassword({
       email,
@@ -56,6 +124,7 @@ export const useStore = create<StoreState>((set) => ({
       }
     }
   },
+  
   signOut: async () => {
     await supabase.auth.signOut();
     set({ currentUser: null });
